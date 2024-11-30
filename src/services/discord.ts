@@ -1,5 +1,6 @@
 import { WebhookClient } from "discord.js";
 import type { Idiom } from "../types";
+import { discordLogger as logger, metrics } from "./logger";
 
 export class DiscordService {
   private webhook: WebhookClient;
@@ -7,9 +8,13 @@ export class DiscordService {
 
   constructor(webhookUrl: string) {
     this.webhook = new WebhookClient({ url: webhookUrl });
+    logger.info("Discord service initialized");
   }
 
   async sendIdioms(idioms: Idiom[]): Promise<void> {
+    const startTime = Date.now();
+    logger.info({ count: idioms.length }, "Preparing to send idioms");
+
     const messages = this.formatIdiomsMessages(idioms);
 
     try {
@@ -18,9 +23,19 @@ export class DiscordService {
           content: message,
           username: "Daily Idioms Bot",
         });
+        metrics.incrementMessagesSent();
       }
+
+      metrics.incrementIdiomsSent(idioms.length);
+      const duration = Date.now() - startTime;
+      logger.info(
+        { duration: `${duration}ms`, count: idioms.length },
+        "Successfully sent idioms"
+      );
+      metrics.recordDeliveryTime();
     } catch (error) {
-      console.error("Failed to send idioms to Discord:", error);
+      metrics.incrementErrors();
+      logger.error({ error }, "Failed to send idioms to Discord");
       throw error;
     }
   }
@@ -39,7 +54,6 @@ export class DiscordService {
     idioms.forEach((idiom, index) => {
       const idiomMessage = this.formatSingleIdiom(idiom, index + 1);
 
-      // If adding this idiom would exceed the limit, start a new message
       if (
         currentMessage.length + idiomMessage.length >
         this.MAX_MESSAGE_LENGTH
@@ -51,11 +65,14 @@ export class DiscordService {
       }
     });
 
-    // Add any remaining content
     if (currentMessage) {
       messages.push(currentMessage);
     }
 
+    logger.debug(
+      { messageCount: messages.length },
+      "Formatted messages for delivery"
+    );
     return messages;
   }
 

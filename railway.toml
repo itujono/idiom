@@ -6,4 +6,4 @@ buildCommand = "bun install"
 startCommand = "bun run src/index.ts"
 healthcheckPath = "/"
 healthcheckTimeout = 100
-restartPolicyType = "on_failure" 
+restartPolicyType = "on_failure"
