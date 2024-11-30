@@ -41,7 +41,7 @@ export class PhrasesDiscordService extends BaseDiscordService {
       message += `   🇮🇩 ${phrase.example.indonesian}\n`;
 
       if (phrase.alt_phrase) {
-        message += `\n   💫 Alternative:\n`;
+        message += `\n   💫 Alternative phrase:\n`;
         message += `   🇮🇩 ${phrase.alt_phrase}\n`;
       }
       message += "\n";

@@ -8,4 +8,4 @@ import { config } from "./config";
 // Initialize services
 const openAIService = new OpenAIService(config.openai.apiKey);
 const idiomsService = new IdiomsService(fallbackIdioms, openAIService);
-const phrasesService = new PhrasesService(openAIService, phrases);
+const phrasesService = new PhrasesService(openAIService);

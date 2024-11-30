@@ -59,44 +59,158 @@ Format the response as JSON:
 
   async generatePhrase(): Promise<Phrase> {
     try {
+      logger.info("Starting phrase generation with OpenAI");
+
       const completion = await this.client.chat.completions.create({
         model: this.model,
         messages: [
           {
             role: "system",
-            content: `You are a helpful assistant that generates casual Indonesian phrases and their English equivalents. 
-Focus on common, everyday expressions that Indonesians use in casual conversations.
+            content: `You are a helpful assistant that generates Indonesian phrases with their non-obvious English equivalents.
+Focus on phrases where the English translation isn't immediately obvious to Indonesian speakers.
 
 Important guidelines:
-1. Use 'x' or 'y' as template variables when the phrase can be used with different words
-2. Keep the Indonesian phrases colloquial (use "gue", "aja", "banget", etc.)
-3. If there's a common alternative way to say the phrase, include it in alt_phrase
-4. Focus on expressions that might be tricky for English speakers to translate directly
-5. Each generated phrase should be unique and cover different contexts or situations
-6. Avoid basic or literal translations; focus on idiomatic expressions
-7. Include regional variations when relevant (Javanese influence, Jakarta slang, etc.)`,
+1. Focus on phrases that:
+   - Are commonly used in Indonesian daily life
+   - Have non-literal English translations
+   - Would be tricky for Indonesians to express in English
+   - Sound natural in both languages
+2. Avoid:
+   - Basic phrases like "Silakan duduk" or "Bisa saya bantu?"
+   - Direct word-for-word translations
+   - Overly formal or textbook-style phrases
+   - Common idioms like "buka kartu" or "main mata"
+3. Use template variables (::X::) only for truly flexible parts
+4. Include alternative phrasings that are equally common
+
+Examples of good phrases:
+{
+  "indonesian": "Ngelindas ::X::",
+  "english": "Run ::X:: over",
+  "example": {
+    "english": "He could've run the robber over by slamming the gas pedal real hard",
+    "indonesian": "Dia bisa aja ngelindas pencurinya dengan nginjek gas dalam-dalam"
+  }
+}
+
+{
+  "indonesian": "Pulangnya ntar aja",
+  "english": "I'll head home later",
+  "example": {
+    "english": "It's still congested here. I'll head home around 5 o'clock or so",
+    "indonesian": "Masih macet nih. Pulangnya ntar aja sekitar jam 5 gitu"
+  },
+  "alt_phrase": "Baliknya nanti aja"
+}
+
+{
+  "indonesian": "Ngegantung ::X::",
+  "english": "Leave ::X:: hanging",
+  "example": {
+    "english": "Don't leave your teammates hanging, they need your input",
+    "indonesian": "Jangan ngegantung tim kamu, mereka butuh masukan kamu"
+  }
+}
+
+You must respond with a JSON object in this format:
+{
+  "indonesian": "natural Indonesian phrase",
+  "english": "non-obvious English equivalent",
+  "example": {
+    "english": "natural example in English",
+    "indonesian": "natural example in Indonesian"
+  },
+  "alt_phrase": "alternative Indonesian phrasing (if applicable)"
+}`,
           },
           {
             role: "user",
             content:
-              "Generate a unique casual Indonesian phrase with its English equivalent. Make it colloquial, commonly used in daily conversations, and different from the example outputs. If there's a common alternative way to say it, include it in alt_phrase.",
+              "Generate a unique Indonesian phrase that's commonly used but has a non-obvious English translation. Focus on expressions that Indonesian speakers might struggle to express naturally in English. Make sure it's different from common phrases like 'buka kartu' (lay cards on the table).",
           },
         ],
         response_format: { type: "json_object" },
+        temperature: 1.0, // Increased for maximum variety
+        max_tokens: 500,
+        presence_penalty: 0.8, // Increased to strongly discourage repetition
+        frequency_penalty: 0.8, // Increased to strongly discourage repetition
       });
 
-      const result = JSON.parse(completion.choices[0].message.content || "{}");
+      logger.info("Received response from OpenAI");
 
-      if (
-        !result.indonesian ||
-        !result.english ||
-        !result.example?.english ||
-        !result.example?.indonesian
-      ) {
-        throw new Error("Invalid response format from OpenAI");
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        logger.error("No content in OpenAI response");
+        throw new Error("No content in OpenAI response");
       }
 
-      return result;
+      logger.info({ content }, "Parsing OpenAI response");
+
+      try {
+        const result = JSON.parse(content);
+
+        if (
+          !result.indonesian ||
+          !result.english ||
+          !result.example?.english ||
+          !result.example?.indonesian
+        ) {
+          logger.error({ result }, "Invalid response format from OpenAI");
+          throw new Error("Invalid response format from OpenAI");
+        }
+
+        // Validate the response isn't too basic
+        const basicPatterns = [
+          "silakan",
+          "permisi",
+          "terima kasih",
+          "selamat",
+          "bisa saya bantu",
+          "mohon maaf",
+          "tolong",
+        ];
+
+        // Validate the response doesn't use overly casual patterns
+        const casualPatterns = [
+          "kebal",
+          "kokoh",
+          "kuat",
+          "udah biasa",
+          "ngga ada",
+          "nol besar",
+          "iri",
+          "ngidam",
+          "kayaknya",
+          "deh",
+          "sih",
+          "buka kartu",
+          "main mata",
+        ];
+
+        const lowerIndonesian = result.indonesian.toLowerCase();
+        if (
+          basicPatterns.some((pattern) => lowerIndonesian.includes(pattern))
+        ) {
+          logger.warn({ result }, "Generated phrase is too basic, retrying");
+          throw new Error("Generated phrase too basic");
+        }
+
+        if (
+          casualPatterns.some((pattern) => lowerIndonesian.includes(pattern))
+        ) {
+          logger.warn({ result }, "Generated phrase is too casual, retrying");
+          throw new Error("Generated phrase too casual");
+        }
+
+        logger.info({ result }, "Successfully generated phrase");
+        return result;
+      } catch (error) {
+        logger.error(
+          { error, content },
+          "Failed to parse or validate OpenAI response"
+        );
+        throw error;
+      }
     } catch (error) {
       logger.error({ error }, "Failed to generate phrase using OpenAI");
       throw error;
@@ -108,7 +222,7 @@ Important guidelines:
     meaning: string
   ): Promise<Example[]> {
     try {
-      const prompt = `Given the idiom "${idiom}" which means "${meaning}", generate 2 natural, conversational example sentences using this idiom. Each example should be in a different context. Make the examples relatable and modern. Then translate each example to Indonesian, maintaining the natural conversational tone. Format the output as JSON:
+      const prompt = `Given the idiom "${idiom}" which means "${meaning}", generate 2 natural, conversational example sentences using this idiom. Each example should be in a different context. Make the examples relatable and modern. Then translate each example to Indonesian, maintaining the natural conversational tone. Return the response as a JSON object with this structure:
 
 {
   "examples": [
@@ -129,7 +243,7 @@ Important guidelines:
           {
             role: "system",
             content:
-              "You are a helpful assistant that generates natural, conversational examples of how to use idioms in everyday situations, with accurate Indonesian translations.",
+              "You are a helpful assistant that generates natural, conversational examples of how to use idioms in everyday situations, with accurate Indonesian translations. You will respond with a JSON object containing the examples.",
           },
           {
             role: "user",
@@ -137,6 +251,8 @@ Important guidelines:
           },
         ],
         response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 500,
       });
 
       const content = response.choices[0]?.message?.content;
