@@ -173,3 +173,58 @@ export const idioms: Idiom[] = [
     ],
   },
 ];
+
+export const fallbackIdioms: Idiom[] = [
+  {
+    phrase: "it's raining cats and dogs",
+    meaning: "it's raining very heavily",
+    examples: [
+      {
+        english:
+          "I can't go for a run now, it's raining cats and dogs outside!",
+        indonesian:
+          "Saya tidak bisa lari sekarang, hujan sangat deras di luar!",
+      },
+      {
+        english:
+          "The picnic was cancelled because it was raining cats and dogs.",
+        indonesian: "Piknik dibatalkan karena hujannya sangat deras.",
+      },
+    ],
+  },
+  {
+    phrase: "break the ice",
+    meaning: "to make people feel more relaxed in a social situation",
+    examples: [
+      {
+        english: "To break the ice, we played some fun team-building games.",
+        indonesian:
+          "Untuk mencairkan suasana, kami bermain beberapa permainan team-building yang menyenangkan.",
+      },
+      {
+        english:
+          "She told a joke to break the ice at the beginning of the meeting.",
+        indonesian:
+          "Dia menceritakan lelucon untuk mencairkan suasana di awal rapat.",
+      },
+    ],
+  },
+  {
+    phrase: "get cold feet",
+    meaning: "to become nervous about doing something you had planned to do",
+    examples: [
+      {
+        english:
+          "He got cold feet just before the presentation and asked me to do it instead.",
+        indonesian:
+          "Dia menjadi gugup tepat sebelum presentasi dan meminta saya untuk menggantikannya.",
+      },
+      {
+        english:
+          "Don't get cold feet now, you've practiced this speech for weeks!",
+        indonesian:
+          "Jangan jadi gugup sekarang, kamu sudah berlatih pidato ini selama berminggu-minggu!",
+      },
+    ],
+  },
+];

@@ -8,3 +8,10 @@ export interface Idiom {
   meaning: string;
   examples: Example[];
 }
+
+export interface Phrase {
+  indonesian: string;
+  english: string;
+  example: Example;
+  alt_phrase?: string;
+}
