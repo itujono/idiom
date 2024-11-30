@@ -27,31 +27,119 @@ const metricsRateLimit = rateLimiter({
   max: 10, // 10 requests per 5 minutes
 });
 
-// Ensure required environment variables are provided
-const IDIOMS_WEBHOOK_URL = process.env.IDIOMS_WEBHOOK_URL;
-const PHRASES_WEBHOOK_URL = process.env.PHRASES_WEBHOOK_URL;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Initialize services with null values first
+let openAIService: OpenAIService | null = null;
+let idiomsDiscordService: IdiomsDiscordService | null = null;
+let phrasesDiscordService: PhrasesDiscordService | null = null;
+let idiomsService: IdiomsService | null = null;
+let phrasesService: PhrasesService | null = null;
+let cronJobs: CronJob[] = [];
 
-if (!IDIOMS_WEBHOOK_URL) {
-  logger.error("IDIOMS_WEBHOOK_URL environment variable is required");
-  throw new Error("IDIOMS_WEBHOOK_URL environment variable is required");
+// Health check status
+let servicesStatus = {
+  openai: false,
+  idioms_discord: false,
+  phrases_discord: false,
+  idioms: false,
+  phrases: false,
+  cron: false,
+};
+
+// Try to initialize services
+try {
+  // Check required environment variables
+  const IDIOMS_WEBHOOK_URL = process.env.IDIOMS_WEBHOOK_URL;
+  const PHRASES_WEBHOOK_URL = process.env.PHRASES_WEBHOOK_URL;
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+  if (OPENAI_API_KEY) {
+    openAIService = new OpenAIService(OPENAI_API_KEY);
+    servicesStatus.openai = true;
+  } else {
+    logger.warn(
+      "OPENAI_API_KEY not provided, OpenAI features will be disabled"
+    );
+  }
+
+  if (IDIOMS_WEBHOOK_URL) {
+    idiomsDiscordService = new IdiomsDiscordService(IDIOMS_WEBHOOK_URL);
+    servicesStatus.idioms_discord = true;
+  } else {
+    logger.warn(
+      "IDIOMS_WEBHOOK_URL not provided, idioms Discord service will be disabled"
+    );
+  }
+
+  if (PHRASES_WEBHOOK_URL) {
+    phrasesDiscordService = new PhrasesDiscordService(PHRASES_WEBHOOK_URL);
+    servicesStatus.phrases_discord = true;
+  } else {
+    logger.warn(
+      "PHRASES_WEBHOOK_URL not provided, phrases Discord service will be disabled"
+    );
+  }
+
+  // Initialize dependent services
+  if (openAIService) {
+    idiomsService = new IdiomsService(fallbackIdioms, openAIService);
+    servicesStatus.idioms = true;
+
+    phrasesService = new PhrasesService(openAIService);
+    servicesStatus.phrases = true;
+  }
+
+  // Only set up cron jobs if all required services are available
+  if (
+    idiomsService &&
+    idiomsDiscordService &&
+    phrasesService &&
+    phrasesDiscordService
+  ) {
+    // Schedule daily idioms delivery (8:00 AM GMT+7)
+    cronJobs.push(
+      new CronJob(
+        "0 1 * * *",
+        async () => {
+          try {
+            logger.info("Starting scheduled idioms delivery");
+            const dailyIdioms = await idiomsService!.getRandomIdioms();
+            await idiomsDiscordService!.sendIdioms(dailyIdioms);
+            logger.info("Daily idioms sent successfully");
+          } catch (error) {
+            logger.error({ error }, "Failed to send daily idioms");
+          }
+        },
+        null,
+        true,
+        "UTC"
+      )
+    );
+
+    // Schedule daily phrases delivery (2:00 PM GMT+7)
+    cronJobs.push(
+      new CronJob(
+        "0 7 * * *",
+        async () => {
+          try {
+            logger.info("Starting scheduled phrases delivery");
+            const dailyPhrases = await phrasesService!.getPhrases(3);
+            await phrasesDiscordService!.sendPhrases(dailyPhrases);
+            logger.info("Daily phrases sent successfully");
+          } catch (error) {
+            logger.error({ error }, "Failed to send daily phrases");
+          }
+        },
+        null,
+        true,
+        "UTC"
+      )
+    );
+
+    servicesStatus.cron = true;
+  }
+} catch (error) {
+  logger.error({ error }, "Error initializing services");
 }
-
-if (!PHRASES_WEBHOOK_URL) {
-  logger.error("PHRASES_WEBHOOK_URL environment variable is required");
-  throw new Error("PHRASES_WEBHOOK_URL environment variable is required");
-}
-
-if (!OPENAI_API_KEY) {
-  logger.error("OPENAI_API_KEY environment variable is required");
-  throw new Error("OPENAI_API_KEY environment variable is required");
-}
-
-const openAIService = new OpenAIService(OPENAI_API_KEY);
-const idiomsDiscordService = new IdiomsDiscordService(IDIOMS_WEBHOOK_URL);
-const phrasesDiscordService = new PhrasesDiscordService(PHRASES_WEBHOOK_URL);
-const idiomsService = new IdiomsService(fallbackIdioms, openAIService);
-const phrasesService = new PhrasesService(openAIService, phrases);
 
 app.use("*", async (c, next) => {
   const start = Date.now();
@@ -65,47 +153,15 @@ app.use("*", async (c, next) => {
   });
 });
 
-// Schedule daily idioms delivery (8:00 AM GMT+7)
-// Note: In cron, we use GMT+0, so 1:00 AM GMT = 8:00 AM GMT+7
-new CronJob(
-  "0 1 * * *",
-  async () => {
-    try {
-      logger.info("Starting scheduled idioms delivery");
-      const dailyIdioms = await idiomsService.getRandomIdioms();
-      await idiomsDiscordService.sendIdioms(dailyIdioms);
-      logger.info("Daily idioms sent successfully");
-    } catch (error) {
-      logger.error({ error }, "Failed to send daily idioms");
-    }
-  },
-  null,
-  true,
-  "UTC"
-);
-
-// Schedule daily phrases delivery (2:00 PM GMT+7)
-// Note: In cron, we use GMT+0, so 7:00 AM GMT = 2:00 PM GMT+7
-new CronJob(
-  "0 7 * * *",
-  async () => {
-    try {
-      logger.info("Starting scheduled phrases delivery");
-      const dailyPhrases = await phrasesService.getPhrases(3);
-      await phrasesDiscordService.sendPhrases(dailyPhrases);
-      logger.info("Daily phrases sent successfully");
-    } catch (error) {
-      logger.error({ error }, "Failed to send daily phrases");
-    }
-  },
-  null,
-  true,
-  "UTC"
-);
-
 // Health check endpoint (no rate limit)
 app.get("/", (c) => {
-  return c.json({ status: "ok", message: "Daily Idioms service is running" });
+  const uptime = process.uptime();
+  return c.json({
+    status: "ok",
+    message: "Daily Idioms service is running",
+    uptime: `${Math.floor(uptime / 60)}m ${Math.floor(uptime % 60)}s`,
+    services: servicesStatus,
+  });
 });
 
 // Rate limited endpoints
@@ -127,6 +183,10 @@ app.get("/metrics", metricsRateLimit, async (c) => {
 });
 
 app.post("/idiom", apiRateLimit, async (c) => {
+  if (!idiomsService || !idiomsDiscordService) {
+    return c.json({ error: "Idioms service is not available" }, 503);
+  }
+
   const apiKey = c.req.header("x-api-key");
 
   if (apiKey !== process.env.API_KEY) {
@@ -154,6 +214,10 @@ app.post("/idiom", apiRateLimit, async (c) => {
 });
 
 app.post("/how-to-say-this", apiRateLimit, async (c) => {
+  if (!phrasesService || !phrasesDiscordService) {
+    return c.json({ error: "Phrases service is not available" }, 503);
+  }
+
   const apiKey = c.req.header("x-api-key");
 
   if (apiKey !== process.env.API_KEY) {
@@ -176,6 +240,10 @@ app.post("/how-to-say-this", apiRateLimit, async (c) => {
 });
 
 app.post("/test-webhook", apiRateLimit, async (c) => {
+  if (!idiomsDiscordService) {
+    return c.json({ error: "Discord service is not available" }, 503);
+  }
+
   const apiKey = c.req.header("x-api-key");
 
   if (apiKey !== process.env.API_KEY) {
