@@ -1,30 +1,86 @@
 # Daily Idioms & Indonesian Phrases Bot
 
-A TypeScript application built with Bun.js and Hono that sends daily English idioms and Indonesian phrases to Discord channels, complete with translations and examples.
+A TypeScript application built with Bun.js and Hono that sends daily English idioms and Indonesian phrases to Discord channels, complete with translations and examples. Uses Notion as a content management system.
+
+## Example Outputs
+
+### Daily Idioms Example
+
+```
+🌟 Hot off the press! New set of idioms for Sunday, December 1, 2024
+
+1. **Bite off more than you can chew**
+💡 To take on more responsibility than you can handle
+
+📝 Example:
+Don't bite off more than you can chew by signing up for five different clubs this semester.
+
+2. **Break the ice**
+💡 To make people feel more comfortable in a social situation
+
+📝 Example:
+The host broke the ice by asking everyone to share a funny story about their weekend.
+```
+
+### How to Say This Example
+
+```
+🎯 Today's must-know Indonesian phrase for Sunday, December 1, 2024
+
+1. **Nggak ada angin nggak ada hujan**: Out of the blue
+
+📝 Examples:
+🇬🇧 He suddenly quit his job out of the blue
+🇮🇩 Dia mengundurkan diri nggak ada angin nggak ada hujan
+
+💫 Alternative phrases:
+🇮🇩 Tiba-tiba aja
+
+2. **Panjang tangan**: Light-fingered/tends to steal
+
+📝 Examples:
+🇬🇧 Be careful with your wallet, that guy is known to be light-fingered
+🇮🇩 Hati-hati sama dompetmu, orang itu terkenal panjang tangan
+
+💫 Alternative phrases:
+🇮🇩 Suka ngambil barang orang
+
+3. **Besar kepala**: Getting cocky
+
+📝 Examples:
+🇬🇧 Ever since he got promoted, he's been getting really cocky
+🇮🇩 Semenjak naik jabatan, dia jadi besar kepala
+
+💫 Alternative phrases:
+🇮🇩 Jadi sombong
+```
 
 ## Features
 
 ### English Idioms
 
-- Sends 4 random English idioms daily at 8:00 AM (GMT+7)
+- Sends random English idioms daily at:
+  - 8:00 AM (GMT+7)
+  - 9:00 AM (GMT+7)
 - Each idiom includes:
   - Clear meaning
-  - Two practical examples in English and Indonesian
+  - Practical examples
 
 ### "How to Say This" - Indonesian Phrases
 
-- Sends 3 Indonesian phrases daily at 2:00 PM (GMT+7)
+- Sends Indonesian phrases daily at:
+  - 2:00 PM (GMT+7)
+  - 3:00 PM (GMT+7)
 - Each phrase includes:
   - English equivalent
   - Practical example in both languages
   - Alternative phrasing (when applicable)
-- Uses OpenAI to generate natural, colloquial phrases
-- Falls back to predefined phrases if needed
 
 ### Technical Features
 
 - Built with TypeScript for type safety
 - Uses Bun.js for fast execution
+- Notion integration for content management
 - Rate limiting for API endpoints
 - Separate Discord webhooks for idioms and phrases
 - Manual trigger endpoints (protected by API key)
@@ -43,7 +99,9 @@ A TypeScript application built with Bun.js and Hono that sends daily English idi
    ```
    IDIOMS_WEBHOOK_URL=your_idioms_discord_webhook_url
    PHRASES_WEBHOOK_URL=your_phrases_discord_webhook_url
-   OPENAI_API_KEY=your_openai_api_key
+   NOTION_TOKEN=your_notion_integration_token
+   NOTION_IDIOMS_DATABASE_ID=your_idioms_database_id
+   NOTION_EXPRESSIONS_DATABASE_ID=your_expressions_database_id
    API_KEY=your_secret_api_key
    PORT=3000
    ```
@@ -65,7 +123,9 @@ A TypeScript application built with Bun.js and Hono that sends daily English idi
 
    - `IDIOMS_WEBHOOK_URL`: Discord webhook URL for idioms channel
    - `PHRASES_WEBHOOK_URL`: Discord webhook URL for phrases channel
-   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `NOTION_TOKEN`: Your Notion integration token
+   - `NOTION_IDIOMS_DATABASE_ID`: ID of your Notion idioms database
+   - `NOTION_EXPRESSIONS_DATABASE_ID`: ID of your Notion expressions database
    - `API_KEY`: A secure random string for API authentication
    - `PORT`: Will be set automatically by Railway
 
@@ -80,12 +140,19 @@ A TypeScript application built with Bun.js and Hono that sends daily English idi
 - `GET /metrics`: Get application metrics (rate limited: 10 requests/5 minutes)
 - `POST /idiom`: Manually trigger idiom delivery (rate limited: 5 requests/minute)
 - `POST /how-to-say-this`: Manually trigger phrase delivery (rate limited: 5 requests/minute)
+- `POST /test-webhook`: Test Discord webhook connection
 
 All endpoints except health check require the `x-api-key` header.
 
 ## Testing the API
 
-Test the manual triggers:
+Use the provided test script:
+
+```bash
+./scripts/test-endpoints.sh https://your-railway-url YOUR_API_KEY
+```
+
+Or test manually with curl:
 
 ```bash
 # For idioms
@@ -96,13 +163,16 @@ curl -X POST -H "x-api-key: your_api_key" https://your-railway-url/how-to-say-th
 
 # For metrics
 curl -H "x-api-key: your_api_key" https://your-railway-url/metrics
+
+# Test webhook
+curl -X POST -H "x-api-key: your_api_key" https://your-railway-url/test-webhook
 ```
 
 ## Rate Limiting
 
 The application includes rate limiting to prevent abuse:
 
-- API endpoints (`/idiom`, `/how-to-say-this`): 5 requests per minute
+- API endpoints (`/idiom`, `/how-to-say-this`, `/test-webhook`): 5 requests per minute
 - Metrics endpoint (`/metrics`): 10 requests per 5 minutes
 - Health check endpoint (`/`): No rate limit
 
@@ -123,11 +193,8 @@ X-RateLimit-Reset: Timestamp when the limit resets
   - Response times
   - Error rates
 - Health endpoint (`/`) can be used for uptime monitoring
+- Detailed error logging with stack traces
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
+I don't accept contributions at the moment.
