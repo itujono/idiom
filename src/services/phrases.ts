@@ -1,16 +1,10 @@
 import { appLogger as logger } from "./logger";
-import { OpenAIService } from "./openai";
 import type { Phrase } from "../types";
-import { phrases as defaultPhrases } from "../data/phrases";
+import { getRandomExpression } from "../lib/notion/fetchers";
 
 export class PhrasesService {
   private recentPhrases: Set<string> = new Set();
   private readonly CACHE_SIZE = 20; // Remember last 20 phrases
-
-  constructor(
-    private openAIService: OpenAIService,
-    private fallbackPhrases: Phrase[] = []
-  ) {}
 
   private addToRecentPhrases(phrase: string) {
     this.recentPhrases.add(phrase);
@@ -25,30 +19,40 @@ export class PhrasesService {
   }
 
   async getPhrases(count: number = 3): Promise<Phrase[]> {
-    logger.info({ count }, "Starting phrase generation");
+    logger.info({ count }, "Starting phrase fetching");
 
     const phrases: Phrase[] = [];
     const errors: Error[] = [];
-    const maxRetries = 5; // Increased retries since we're being more selective
+    const maxRetries = 5;
 
     for (let i = 0; i < count; i++) {
       let success = false;
       let retries = 0;
 
-      logger.info(
-        { phraseIndex: i, maxRetries },
-        "Starting generation for phrase"
-      );
+      logger.info({ phraseIndex: i, maxRetries }, "Starting fetch for phrase");
 
       while (!success && retries < maxRetries) {
         try {
           logger.info(
             { phraseIndex: i, attempt: retries + 1, maxRetries },
-            "Attempting to generate phrase"
+            "Attempting to fetch phrase"
           );
 
-          const phrase = await this.openAIService.generatePhrase();
-          logger.info({ phrase }, "Received phrase from OpenAI");
+          const expression = await getRandomExpression();
+
+          if (!expression) {
+            logger.warn("No unused expressions found in Notion");
+            break;
+          }
+
+          logger.info({ expression }, "Received expression from Notion");
+
+          const phrase: Phrase = {
+            indonesian: expression.sentence,
+            english: expression.in_english,
+            examples: expression.examples,
+            alt_phrases: expression.alt_phrases,
+          };
 
           // Check for duplicates in current batch
           const isDuplicate = phrases.some((p) =>
@@ -75,17 +79,38 @@ export class PhrasesService {
             logger.info(
               { phraseIndex: i, attempt: retries + 1, isDuplicate, isRecent },
               isDuplicate
-                ? "Generated phrase was duplicate"
-                : "Generated phrase was too recent"
+                ? "Fetched phrase was duplicate"
+                : "Fetched phrase was too recent"
             );
             retries++;
           }
         } catch (error) {
           logger.warn(
             { error, phraseIndex: i, attempt: retries + 1 },
-            "Failed to generate phrase"
+            "Failed to fetch phrase"
           );
-          errors.push(error as Error);
+          if (error instanceof Error) {
+            errors.push(error);
+            logger.error(
+              {
+                error: error.message,
+                stack: error.stack,
+                phraseIndex: i,
+                attempt: retries + 1,
+              },
+              "Detailed phrase fetch error"
+            );
+          } else {
+            errors.push(new Error(`Unknown error: ${String(error)}`));
+            logger.error(
+              {
+                error: String(error),
+                phraseIndex: i,
+                attempt: retries + 1,
+              },
+              "Unknown phrase fetch error"
+            );
+          }
           retries++;
         }
 
@@ -100,92 +125,15 @@ export class PhrasesService {
 
       if (!success) {
         logger.warn(
-          { phraseIndex: i, maxRetries },
+          { phraseIndex: i, maxRetries, errors },
           "Failed all attempts for this phrase"
         );
-      }
-    }
-
-    logger.info(
-      { generatedCount: phrases.length, requestedCount: count },
-      "Completed initial generation attempts"
-    );
-
-    // Only fall back if we couldn't generate enough phrases
-    if (phrases.length < count) {
-      logger.warn(
-        { errors, generatedCount: phrases.length, requestedCount: count },
-        "Failed to generate some phrases after all retries"
-      );
-
-      // Try user-provided fallbacks first
-      let availableFallbacks = [...this.fallbackPhrases];
-      logger.info(
-        { userFallbackCount: availableFallbacks.length },
-        "Checking user-provided fallbacks"
-      );
-
-      // If no user fallbacks or not enough, use default fallbacks
-      if (availableFallbacks.length === 0) {
-        logger.info(
-          { defaultFallbackCount: defaultPhrases.length },
-          "Using default fallbacks"
+        throw new Error(
+          `Failed to fetch phrase after ${maxRetries} attempts: ${errors
+            .map((e) => e.message)
+            .join(", ")}`
         );
-        availableFallbacks = defaultPhrases;
       }
-
-      if (availableFallbacks.length === 0) {
-        logger.error("No fallback phrases available");
-        throw new Error("No fallback phrases available");
-      }
-
-      // Filter out recent phrases from fallbacks
-      availableFallbacks = availableFallbacks.filter(
-        (f) => !this.isRecentPhrase(f.indonesian.toLowerCase())
-      );
-
-      // Fill remaining slots with random fallback phrases
-      const remainingCount = count - phrases.length;
-      const shuffledFallbacks = availableFallbacks.sort(
-        () => 0.5 - Math.random()
-      );
-
-      let fallbacksAdded = 0;
-      let fallbackIndex = 0;
-
-      logger.info(
-        { remainingCount, availableFallbacks: shuffledFallbacks.length },
-        "Starting fallback selection"
-      );
-
-      while (
-        fallbacksAdded < remainingCount &&
-        fallbackIndex < shuffledFallbacks.length
-      ) {
-        const fallback = shuffledFallbacks[fallbackIndex];
-        const isDuplicate = phrases.some((p) =>
-          this.areSimilarPhrases(p, fallback)
-        );
-
-        logger.info(
-          { fallbackIndex, isDuplicate, fallbacksAdded },
-          "Checking fallback phrase"
-        );
-
-        if (!isDuplicate) {
-          phrases.push(fallback);
-          this.addToRecentPhrases(fallback.indonesian.toLowerCase());
-          fallbacksAdded++;
-          logger.info({ fallbacksAdded, fallback }, "Added fallback phrase");
-        }
-
-        fallbackIndex++;
-      }
-
-      logger.info(
-        { finalCount: phrases.length, fallbacksAdded },
-        "Completed fallback addition"
-      );
     }
 
     return phrases;

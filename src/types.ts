@@ -6,12 +6,12 @@ export interface Example {
 export interface Idiom {
   phrase: string;
   meaning: string;
-  examples: Example[];
+  examples: string;
 }
 
 export interface Phrase {
   indonesian: string;
   english: string;
-  example: Example;
-  alt_phrase?: string;
+  examples: string;
+  alt_phrases?: string;
 }

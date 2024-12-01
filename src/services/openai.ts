@@ -4,7 +4,7 @@ import type { Phrase, Example, Idiom } from "../types";
 
 export class OpenAIService {
   private client: OpenAI;
-  private readonly model = "gpt-4-1106-preview";
+  private readonly model = "gpt-4o-mini";
 
   constructor(apiKey: string) {
     this.client = new OpenAI({ apiKey });
@@ -30,7 +30,7 @@ Format the response as JSON:
           {
             role: "system",
             content:
-              "You are a helpful assistant that generates interesting and useful English idioms.",
+              "You are a helpful assistant that generates interesting and useful English idioms that could spark conversations.",
           },
           {
             role: "user",

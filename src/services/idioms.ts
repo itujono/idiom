@@ -1,66 +1,64 @@
 import type { Idiom } from "../types";
 import { appLogger as logger } from "./logger";
-import { OpenAIService } from "./openai";
+import { getRandomIdiom } from "../lib/notion/fetchers";
 
 export class IdiomsService {
-  constructor(
-    private fallbackIdioms: Idiom[],
-    private openAIService: OpenAIService
-  ) {}
-
   async getRandomIdioms(count: number = 2): Promise<Idiom[]> {
     const idioms: Idiom[] = [];
     const errors: Error[] = [];
 
-    // Generate random idioms
+    // Fetch random idioms from Notion
     for (let i = 0; i < count; i++) {
       try {
-        // Generate a random idiom
-        logger.info("Generating random idiom");
-        const idiom = await this.openAIService.generateRandomIdiom();
-        logger.info({ idiom }, "Generated random idiom");
+        logger.info("Fetching random idiom from Notion");
+        const idiom = await getRandomIdiom();
 
-        // Generate examples for the idiom
-        logger.info({ idiom: idiom.phrase }, "Generating examples");
-        const examples = await this.openAIService.generateIdiomExamples(
-          idiom.phrase,
-          idiom.meaning
-        );
-        logger.info({ idiom: idiom.phrase, examples }, "Generated examples");
+        if (!idiom) {
+          logger.warn("No unused idioms found in Notion");
+          continue;
+        }
+
+        logger.info({ idiom }, "Fetched random idiom");
 
         idioms.push({
-          ...idiom,
-          examples,
+          phrase: idiom.idiom,
+          meaning: idiom.meaning,
+          examples: idiom.examples,
         });
       } catch (error) {
-        logger.warn({ error }, "Failed to generate idiom");
-        errors.push(error as Error);
+        logger.warn({ error }, "Failed to fetch idiom from Notion");
+        if (error instanceof Error) {
+          errors.push(error);
+          logger.error(
+            {
+              error: error.message,
+              stack: error.stack,
+              index: i,
+            },
+            "Detailed idiom fetch error"
+          );
+        } else {
+          errors.push(new Error(`Unknown error: ${String(error)}`));
+          logger.error(
+            {
+              error: String(error),
+              index: i,
+            },
+            "Unknown idiom fetch error"
+          );
+        }
       }
     }
 
-    // If we couldn't get enough idioms, use fallbacks
     if (idioms.length < count) {
+      const errorMessage = `Failed to fetch enough idioms: got ${
+        idioms.length
+      }/${count}. Errors: ${errors.map((e) => e.message).join(", ")}`;
       logger.warn(
-        { errors, generatedCount: idioms.length, requestedCount: count },
-        "Failed to generate some idioms, falling back to predefined ones"
+        { errors, fetchedCount: idioms.length, requestedCount: count },
+        errorMessage
       );
-
-      const remainingCount = count - idioms.length;
-      const shuffledFallbacks = [...this.fallbackIdioms].sort(
-        () => 0.5 - Math.random()
-      );
-
-      // Ensure we don't duplicate any idioms
-      const fallbackIdioms = shuffledFallbacks
-        .filter((fallback) => !idioms.some((i) => i.phrase === fallback.phrase))
-        .slice(0, remainingCount);
-
-      logger.info(
-        { fallbackCount: fallbackIdioms.length },
-        "Adding fallback idioms"
-      );
-
-      idioms.push(...fallbackIdioms);
+      throw new Error(errorMessage);
     }
 
     return idioms;

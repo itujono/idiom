@@ -33,16 +33,16 @@ export class PhrasesDiscordService extends BaseDiscordService {
     let message = this.getRandomTitle(this.TITLES);
 
     phrases.forEach((phrase, index) => {
-      message += `${index + 1}. **${phrase.indonesian}**: ${
-        phrase.english
-      }\n\n`;
-      message += `   📝 Example:\n`;
-      message += `   🇬🇧 ${phrase.example.english}\n`;
-      message += `   🇮🇩 ${phrase.example.indonesian}\n`;
+      message += `${index + 1}. **${phrase.indonesian}**: ${phrase.english}\n`;
 
-      if (phrase.alt_phrase) {
-        message += `\n   💫 Alternative phrase:\n`;
-        message += `   🇮🇩 ${phrase.alt_phrase}\n`;
+      if (phrase.examples) {
+        message += `   📝 Examples:\n`;
+        message += `   ${phrase.examples}\n`;
+      }
+
+      if (phrase.alt_phrases) {
+        message += `\n   💫 Alternative phrases:\n`;
+        message += `   🇮🇩 ${phrase.alt_phrases}\n`;
       }
       message += "\n";
     });

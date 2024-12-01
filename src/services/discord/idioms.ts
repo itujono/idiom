@@ -21,7 +21,7 @@ export class IdiomsDiscordService extends BaseDiscordService {
     "🌟 Stellar idioms coming your way for",
   ];
 
-  private readonly MAX_MESSAGE_LENGTH = 1500; // Reduced from 1900 to 1500 for extra safety
+  private readonly MAX_MESSAGE_LENGTH = 1800;
 
   constructor(webhookUrl: string) {
     super(webhookUrl, "Idioms");
@@ -46,13 +46,10 @@ export class IdiomsDiscordService extends BaseDiscordService {
     while (currentIdiomIndex < idioms.length) {
       const idiom = idioms[currentIdiomIndex];
       const idiomContent = this.formatSingleIdiom(idiom, currentIdiomIndex + 1);
+      const isExceedingLimit =
+        currentMessage.length + idiomContent.length > this.MAX_MESSAGE_LENGTH;
 
-      // Check if adding this idiom would exceed the limit
-      if (
-        currentMessage.length + idiomContent.length >
-        this.MAX_MESSAGE_LENGTH
-      ) {
-        // Save current message and start a new one
+      if (isExceedingLimit) {
         messages.push(currentMessage);
         currentMessage = "";
       }
@@ -73,11 +70,9 @@ export class IdiomsDiscordService extends BaseDiscordService {
     let content = `${index}. **${idiom.phrase}**\n`;
     content += `💡 ${idiom.meaning}\n\n`;
 
-    idiom.examples.forEach((example, exIndex) => {
-      content += `📝 Example ${exIndex + 1}:\n`;
-      content += `🇬🇧 ${example.english}\n`;
-      content += `🇮🇩 ${example.indonesian}\n\n`;
-    });
+    if (idiom.examples) {
+      content += `📝 Example:\n${idiom.examples}\n\n`;
+    }
 
     return content;
   }
