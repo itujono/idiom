@@ -6,9 +6,7 @@ export const errorHandler = async (c: Context, next: Next) => {
     await next();
   } catch (error) {
     logger.error({ error }, 'Request failed');
-    if (error instanceof Error) {
-      return c.json({ error: error.message, details: error.stack }, 500);
-    }
+    if (error instanceof Error) return c.json({ error: error.message, details: error.stack }, 500);
     return c.json({ error: 'Internal server error', details: String(error) }, 500);
   }
 };
