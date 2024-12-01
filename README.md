@@ -146,13 +146,7 @@ All endpoints except health check require the `x-api-key` header.
 
 ## Testing the API
 
-Use the provided test script:
-
-```bash
-./scripts/test-endpoints.sh https://your-railway-url YOUR_API_KEY
-```
-
-Or test manually with curl:
+Test manually with curl:
 
 ```bash
 # For idioms
