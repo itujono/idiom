@@ -1,50 +1,64 @@
-import type { Idiom } from '../types';
 import { appLogger as logger } from './logger';
-import { getRandomIdiom } from '../lib/notion/fetchers';
+import type { Idiom } from '../types';
+import { getRandomIdioms, updateLastSentDates } from '../lib/notion/fetchers';
 
 export class IdiomsService {
-  async getRandomIdioms(count = 3): Promise<Idiom[]> {
-    const idioms: Idiom[] = [];
-    const errors: Error[] = [];
+  private recentIdioms: Set<string> = new Set();
+  private readonly CACHE_SIZE = 20;
 
-    for (let i = 0; i < count; i++) {
-      try {
-        logger.info('Fetching random idiom from Notion');
-        const idiom = await getRandomIdiom();
+  private addToRecentIdioms(idiom: string) {
+    this.recentIdioms.add(idiom);
+    if (this.recentIdioms.size > this.CACHE_SIZE) {
+      this.recentIdioms.delete(this.recentIdioms.values().next().value);
+    }
+  }
 
-        if (!idiom) {
-          logger.warn('No unused idioms found in Notion');
-          continue;
-        }
+  private isRecentIdiom(idiom: string): boolean {
+    return this.recentIdioms.has(idiom);
+  }
 
-        logger.info({ idiom }, 'Fetched random idiom');
+  async getIdioms(count: number = 3): Promise<Idiom[]> {
+    logger.info({ count }, 'Starting idiom fetching');
 
-        idioms.push({ phrase: idiom.idiom, meaning: idiom.meaning, examples: idiom.examples });
-      } catch (error) {
-        logger.warn({ error }, 'Failed to fetch idiom from Notion');
-        if (error instanceof Error) {
-          errors.push(error);
-          logger.error(
-            {
-              error: error.message,
-              stack: error.stack,
-              index: i,
-            },
-            'Detailed idiom fetch error'
-          );
-        } else {
-          errors.push(new Error(`Unknown error: ${String(error)}`));
-          logger.error({ error: String(error), index: i }, 'Unknown idiom fetch error');
+    try {
+      const notionIdioms = await getRandomIdioms(count * 2);
+      logger.info({ fetchedCount: notionIdioms.length }, 'Fetched idioms from Notion');
+
+      const idioms: Idiom[] = [];
+      const idsToUpdate: string[] = [];
+
+      for (const item of notionIdioms) {
+        const idiom: Idiom = {
+          id: item.id,
+          phrase: item.idiom,
+          meaning: item.meaning,
+          examples: item.examples,
+        };
+
+        const isDuplicate = idioms.some(i => i.phrase === idiom.phrase);
+        const isRecent = this.isRecentIdiom(idiom.phrase.toLowerCase());
+
+        if (!isDuplicate && !isRecent) {
+          idioms.push(idiom);
+          idsToUpdate.push(idiom.id);
+          this.addToRecentIdioms(idiom.phrase.toLowerCase());
+
+          if (idioms.length >= count) break;
         }
       }
-    }
 
-    if (idioms.length < count) {
-      const errorMessage = `Failed to fetch enough idioms: got ${idioms.length}/${count}. Errors: ${errors.map(e => e.message).join(', ')}`;
-      logger.warn({ errors, fetchedCount: idioms.length, requestedCount: count }, errorMessage);
-      throw new Error(errorMessage);
-    }
+      if (idioms.length < count) {
+        logger.warn({ requestedCount: count, actualCount: idioms.length }, 'Could not fetch enough unique idioms');
+      }
 
-    return idioms;
+      // Update last_sent dates for selected idioms
+      await updateLastSentDates(idsToUpdate);
+      logger.info({ updatedCount: idsToUpdate.length }, 'Updated last_sent dates');
+
+      return idioms;
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch idioms');
+      throw error;
+    }
   }
 }

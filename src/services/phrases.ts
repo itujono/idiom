@@ -1,6 +1,6 @@
-import { appLogger as logger } from "./logger";
-import type { Phrase } from "../types";
-import { getRandomExpression } from "../lib/notion/fetchers";
+import { appLogger as logger } from './logger';
+import type { Phrase } from '../types';
+import { getRandomExpressions, updateLastSentDates } from '../lib/notion/fetchers';
 
 export class PhrasesService {
   private recentPhrases: Set<string> = new Set();
@@ -19,135 +19,61 @@ export class PhrasesService {
   }
 
   async getPhrases(count: number = 3): Promise<Phrase[]> {
-    logger.info({ count }, "Starting phrase fetching");
+    logger.info({ count }, 'Starting phrase fetching');
 
-    const phrases: Phrase[] = [];
-    const errors: Error[] = [];
-    const maxRetries = 5;
+    try {
+      // Fetch more expressions than needed to account for filtering
+      const expressions = await getRandomExpressions(count * 2);
+      logger.info({ fetchedCount: expressions.length }, 'Fetched expressions from Notion');
 
-    for (let i = 0; i < count; i++) {
-      let success = false;
-      let retries = 0;
+      const phrases: Phrase[] = [];
+      const idsToUpdate: string[] = [];
 
-      logger.info({ phraseIndex: i, maxRetries }, "Starting fetch for phrase");
+      for (const expression of expressions) {
+        const phrase: Phrase = {
+          id: expression.id,
+          indonesian: expression.sentence,
+          english: expression.in_english,
+          examples: expression.examples,
+          alt_phrases: expression.alt_phrases,
+        };
 
-      while (!success && retries < maxRetries) {
-        try {
-          logger.info(
-            { phraseIndex: i, attempt: retries + 1, maxRetries },
-            "Attempting to fetch phrase"
-          );
+        // Check if it's a recent phrase or duplicate in current batch
+        const isDuplicate = phrases.some(p => this.areSimilarPhrases(p, phrase));
+        const isRecent = this.isRecentPhrase(phrase.indonesian.toLowerCase());
 
-          const expression = await getRandomExpression();
+        if (!isDuplicate && !isRecent) {
+          phrases.push(phrase);
+          idsToUpdate.push(phrase.id);
+          this.addToRecentPhrases(phrase.indonesian.toLowerCase());
 
-          if (!expression) {
-            logger.warn("No unused expressions found in Notion");
-            break;
-          }
-
-          logger.info({ expression }, "Received expression from Notion");
-
-          const phrase: Phrase = {
-            indonesian: expression.sentence,
-            english: expression.in_english,
-            examples: expression.examples,
-            alt_phrases: expression.alt_phrases,
-          };
-
-          // Check for duplicates in current batch
-          const isDuplicate = phrases.some((p) =>
-            this.areSimilarPhrases(p, phrase)
-          );
-
-          // Check if it's a recent phrase
-          const isRecent = this.isRecentPhrase(phrase.indonesian.toLowerCase());
-
-          logger.info(
-            { isDuplicate, isRecent },
-            "Checked for duplicates and recency"
-          );
-
-          if (!isDuplicate && !isRecent) {
-            phrases.push(phrase);
-            this.addToRecentPhrases(phrase.indonesian.toLowerCase());
-            success = true;
-            logger.info(
-              { phraseIndex: i, phrase },
-              "Successfully added unique phrase"
-            );
-          } else {
-            logger.info(
-              { phraseIndex: i, attempt: retries + 1, isDuplicate, isRecent },
-              isDuplicate
-                ? "Fetched phrase was duplicate"
-                : "Fetched phrase was too recent"
-            );
-            retries++;
-          }
-        } catch (error) {
-          logger.warn(
-            { error, phraseIndex: i, attempt: retries + 1 },
-            "Failed to fetch phrase"
-          );
-          if (error instanceof Error) {
-            errors.push(error);
-            logger.error(
-              {
-                error: error.message,
-                stack: error.stack,
-                phraseIndex: i,
-                attempt: retries + 1,
-              },
-              "Detailed phrase fetch error"
-            );
-          } else {
-            errors.push(new Error(`Unknown error: ${String(error)}`));
-            logger.error(
-              {
-                error: String(error),
-                phraseIndex: i,
-                attempt: retries + 1,
-              },
-              "Unknown phrase fetch error"
-            );
-          }
-          retries++;
-        }
-
-        if (!success && retries < maxRetries) {
-          logger.info(
-            { phraseIndex: i, nextAttempt: retries + 1 },
-            "Adding delay before next attempt"
-          );
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // Break if we have enough phrases
+          if (phrases.length >= count) break;
         }
       }
 
-      if (!success) {
-        logger.warn(
-          { phraseIndex: i, maxRetries, errors },
-          "Failed all attempts for this phrase"
-        );
-        throw new Error(
-          `Failed to fetch phrase after ${maxRetries} attempts: ${errors
-            .map((e) => e.message)
-            .join(", ")}`
-        );
+      if (phrases.length < count) {
+        logger.warn({ requestedCount: count, actualCount: phrases.length }, 'Could not fetch enough unique phrases');
       }
+
+      // Update last_sent dates for selected phrases
+      await updateLastSentDates(idsToUpdate);
+      logger.info({ updatedCount: idsToUpdate.length }, 'Updated last_sent dates');
+
+      return phrases;
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch phrases');
+      throw error;
     }
-
-    return phrases;
   }
 
   private areSimilarPhrases(a: Phrase, b: Phrase): boolean {
-    // Check for exact matches
     if (a.indonesian === b.indonesian || a.english === b.english) {
       return true;
     }
 
     // Check for similar template patterns
-    const stripTemplate = (str: string) =>
-      str.replace(/\s*::\w+::\s*/g, " x ").trim();
+    const stripTemplate = (str: string) => str.replace(/\s*::\w+::\s*/g, ' x ').trim();
     const normalizeStr = (str: string) => stripTemplate(str.toLowerCase());
 
     const normalizedA = {
@@ -160,9 +86,6 @@ export class PhrasesService {
       english: normalizeStr(b.english),
     };
 
-    return (
-      normalizedA.indonesian === normalizedB.indonesian ||
-      normalizedA.english === normalizedB.english
-    );
+    return normalizedA.indonesian === normalizedB.indonesian || normalizedA.english === normalizedB.english;
   }
 }

@@ -81,6 +81,11 @@ The host broke the ice by asking everyone to share a funny story about their wee
 - Built with TypeScript for type safety
 - Uses Bun.js for fast execution
 - Notion integration for content management
+- Smart content rotation system:
+  - Prevents duplicate content within 30-day windows
+  - Tracks last sent date for each item
+  - Uses Fisher-Yates shuffle for true randomization
+  - Maintains large pool size for better variety
 - Rate limiting for API endpoints
 - Separate Discord webhooks for idioms and phrases
 - Manual trigger endpoints (protected by API key)
@@ -144,6 +149,15 @@ The host broke the ice by asking everyone to share a funny story about their wee
 
 All endpoints except health check require the `x-api-key` header.
 
+## Content Management
+
+The application uses Notion as its CMS with some special features:
+
+- **Duplicate Prevention**: Items won't be repeated within a 30-day window
+- **Content Tracking**: Each item's last sent date is automatically tracked
+- **Smart Selection**: Uses an improved randomization algorithm to ensure even distribution
+- **Large Pool**: Maintains a large selection pool for better variety
+
 ## Testing the API
 
 Test manually with curl:
@@ -154,19 +168,13 @@ curl -X POST -H "x-api-key: your_api_key" https://your-railway-url/idiom
 
 # For Indonesian phrases
 curl -X POST -H "x-api-key: your_api_key" https://your-railway-url/how-to-say-this
-
-# For metrics
-curl -H "x-api-key: your_api_key" https://your-railway-url/metrics
-
-# Test webhook
-curl -X POST -H "x-api-key: your_api_key" https://your-railway-url/test-webhook
 ```
 
 ## Rate Limiting
 
 The application includes rate limiting to prevent abuse:
 
-- API endpoints (`/idiom`, `/how-to-say-this`, `/test-webhook`): 5 requests per minute
+- API endpoints (`/idiom`, `/how-to-say-this`): 5 requests per minute
 - Metrics endpoint (`/metrics`): 10 requests per 5 minutes
 - Health check endpoint (`/`): No rate limit
 
