@@ -12,6 +12,9 @@ export interface ServicesStatus {
   cron: boolean;
 }
 
+const IDIOMS_COUNT = 2;
+const PHRASES_COUNT = 3;
+
 export class ServicesContainer {
   private idiomsDiscordService: IdiomsDiscordService | null = null;
   private phrasesDiscordService: PhrasesDiscordService | null = null;
@@ -70,7 +73,7 @@ export class ServicesContainer {
         async () => {
           try {
             logger.info('Starting scheduled idioms delivery (8:00 AM GMT+7)');
-            const dailyIdioms = await this.idiomsService!.getRandomIdioms();
+            const dailyIdioms = await this.idiomsService!.getIdioms(IDIOMS_COUNT);
             await this.idiomsDiscordService!.sendIdioms(dailyIdioms);
             logger.info('Daily idioms sent successfully');
           } catch (error) {
@@ -90,7 +93,7 @@ export class ServicesContainer {
         async () => {
           try {
             logger.info('Starting scheduled idioms delivery (9:00 AM GMT+7)');
-            const dailyIdioms = await this.idiomsService!.getRandomIdioms();
+            const dailyIdioms = await this.idiomsService!.getIdioms(IDIOMS_COUNT);
             await this.idiomsDiscordService!.sendIdioms(dailyIdioms);
             logger.info('Daily idioms sent successfully');
           } catch (error) {
@@ -110,7 +113,7 @@ export class ServicesContainer {
         async () => {
           try {
             logger.info('Starting scheduled phrases delivery (2:00 PM GMT+7)');
-            const dailyPhrases = await this.phrasesService!.getPhrases(3);
+            const dailyPhrases = await this.phrasesService!.getPhrases(PHRASES_COUNT);
             await this.phrasesDiscordService!.sendPhrases(dailyPhrases);
             logger.info('Daily phrases sent successfully');
           } catch (error) {
@@ -130,7 +133,7 @@ export class ServicesContainer {
         async () => {
           try {
             logger.info('Starting scheduled phrases delivery (3:00 PM GMT+7)');
-            const dailyPhrases = await this.phrasesService!.getPhrases(3);
+            const dailyPhrases = await this.phrasesService!.getPhrases(PHRASES_COUNT);
             await this.phrasesDiscordService!.sendPhrases(dailyPhrases);
             logger.info('Daily phrases sent successfully');
           } catch (error) {

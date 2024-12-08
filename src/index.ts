@@ -65,7 +65,7 @@ app.post('/idiom', apiRateLimit, authMiddleware, async c => {
   }
 
   logger.info('Manual idiom trigger initiated');
-  const dailyIdioms = await idiomsService.getRandomIdioms();
+  const dailyIdioms = await idiomsService.getIdioms(3);
   logger.info({ dailyIdioms }, 'Generated idioms');
 
   await idiomsDiscordService.sendIdioms(dailyIdioms);
